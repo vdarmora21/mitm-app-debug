@@ -54,13 +54,24 @@ for attempt in 1 2 3; do
   ( timeout 60 adb shell su -c id > "$OUT/su-id.txt" 2>&1 ) &
   SU_PID=$!
   sleep 3
-  adb shell dumpsys activity activities | grep -m1 -E 'topResumedActivity|mResumedActivity' >&2 || true
-  adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 && adb exec-out cat /sdcard/ui.xml | grep -oE '<node [^>]*>' | grep -E 'magisk' | grep -oE '(text|resource-id|content-desc|enabled)="[^"]*"' | paste -sd' ' | cut -c1-1500 >&2
-  for _ in $(seq 1 20); do
-    kill -0 $SU_PID 2>/dev/null || break
-    tap_match 'grant' && { echo "tapped grant" >&2; break; }
-    sleep 0.5
-  done
+  # Magisk hides its su dialog from accessibility, so tap by position: the dialog
+  # window is the only node in the dump, and Grant sits in its bottom-right corner.
+  if adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1; then
+    B=$(adb exec-out cat /sdcard/ui.xml | grep -oE 'bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' | head -1 | grep -oE '[0-9]+' | paste -sd' ')
+    echo "su dialog bounds: $B" >&2
+    if [ "$attempt" = 1 ]; then
+      adb exec-out screencap -p | gzip -9 | base64 -w0 > "$OUT/su-dialog.b64"
+      echo "SCREENSHOT_B64_BEGIN"; cat "$OUT/su-dialog.b64"; echo; echo "SCREENSHOT_B64_END"
+    fi
+    set -- $B
+    if [ $# -eq 4 ]; then
+      X=$(( $1 + ($3 - $1) * 3 / 4 ))
+      for DY in 60 100 140 180 220; do
+        kill -0 $SU_PID 2>/dev/null || break
+        adb shell input tap $X $(( $4 - DY )); sleep 1
+      done
+    fi
+  fi
   wait $SU_PID || true
   echo "attempt $attempt: $(cat "$OUT/su-id.txt")" >&2
   grep -q 'uid=0' "$OUT/su-id.txt" && break

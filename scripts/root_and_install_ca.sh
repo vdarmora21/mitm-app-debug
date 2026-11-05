@@ -32,14 +32,16 @@ start_emulator
 adb shell pm list packages | grep -q com.topjohnwu.magisk || { echo "Magisk app missing" >&2; exit 1; }
 
 log "Open Magisk once so it can finish setup"
-adb shell monkey -p com.topjohnwu.magisk -c android.intent.category.LAUNCHER 1 > /dev/null
+adb shell pm grant com.topjohnwu.magisk android.permission.POST_NOTIFICATIONS || true
+adb shell monkey -p com.topjohnwu.magisk -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
 sleep 15
+tap_text 'Allow' && sleep 3
 dump_texts
 # "Requires additional setup" -> OK reboots the device.
 if tap_text 'OK'; then
   echo "Magisk asked for additional setup, waiting for reboot" >&2
   sleep 20; wait_boot
-  adb shell monkey -p com.topjohnwu.magisk -c android.intent.category.LAUNCHER 1 > /dev/null
+  adb shell monkey -p com.topjohnwu.magisk -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
   sleep 10; dump_texts
 fi
 

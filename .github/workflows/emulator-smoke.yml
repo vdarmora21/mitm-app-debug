@@ -1,0 +1,81 @@
+name: Emulator smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      api-level:
+        description: Android API level
+        default: '34'
+      target:
+        description: System image target
+        default: google_apis_playstore
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EMULATOR_OPTS: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Start mitmdump
+        run: |
+          pip install mitmproxy
+          mkdir -p out
+          nohup mitmdump --listen-port 8080 -w out/flows.mitm --set hardump=out/flows.har > out/mitmdump.log 2>&1 &
+          sleep 5
+
+      - name: Restore AVD
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ inputs.api-level }}-${{ inputs.target }}-pixel_4
+
+      - name: Create AVD and snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ inputs.api-level }}
+          target: ${{ inputs.target }}
+          arch: x86_64
+          profile: pixel_4
+          force-avd-creation: false
+          emulator-options: ${{ env.EMULATOR_OPTS }}
+          disable-animations: false
+          script: echo "AVD snapshot created"
+
+      - name: Run smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ inputs.api-level }}
+          target: ${{ inputs.target }}
+          arch: x86_64
+          profile: pixel_4
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save ${{ env.EMULATOR_OPTS }}
+          disable-animations: true
+          script: bash scripts/smoke.sh
+
+      - name: Stop mitmdump
+        if: always()
+        run: pkill -INT mitmdump || true; sleep 5
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-results
+          path: out/

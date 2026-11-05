@@ -1,0 +1,33 @@
+name: Build Magisk CA module
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['module/**', 'build_module.sh']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Use the CA stored in the MITM_CA_CERT secret so every run trusts the same
+      # mitmproxy instance; otherwise generate a fresh one for this run.
+      - name: Get mitmproxy CA
+        env:
+          MITM_CA_CERT: ${{ secrets.MITM_CA_CERT }}
+        run: |
+          mkdir -p ~/.mitmproxy
+          if [ -n "$MITM_CA_CERT" ]; then
+            printf '%s\n' "$MITM_CA_CERT" > ~/.mitmproxy/mitmproxy-ca-cert.pem
+          else
+            pipx install mitmproxy
+            timeout 5 mitmdump || true
+          fi
+
+      - run: bash build_module.sh ~/.mitmproxy/mitmproxy-ca-cert.pem user-ca-mitm.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: user-ca-mitm
+          path: user-ca-mitm.zip

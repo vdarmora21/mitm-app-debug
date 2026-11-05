@@ -65,7 +65,7 @@ for attempt in 1 2 3; do
   dump_texts
   sleep 5
 done
-grep -q 'uid=0' "$OUT/su-id.txt" || { adb exec-out screencap -p > "$OUT/su-prompt.png"; echo "Root was not granted" >&2; exit 1; }
+grep -q 'uid=0' "$OUT/su-id.txt" || { adb logcat -d | grep -iE 'magisk|\bsu\b' | tail -60 >&2; adb exec-out screencap -p > "$OUT/su-prompt.png"; echo "Root was not granted" >&2; exit 1; }
 
 log "Install CA module"
 bash "$HERE/../build_module.sh" "$HOME/.mitmproxy/mitmproxy-ca-cert.pem" "$OUT/user-ca-mitm.zip"

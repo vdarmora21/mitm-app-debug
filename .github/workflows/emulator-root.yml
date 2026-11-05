@@ -1,0 +1,67 @@
+name: Emulator root + CA test
+
+on:
+  workflow_dispatch:
+    inputs:
+      api-level:
+        description: Android API level
+        default: '34'
+      target:
+        description: System image target
+        default: google_apis_playstore
+
+jobs:
+  root:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      API: ${{ inputs.api-level }}
+      TARGET: ${{ inputs.target }}
+      OUT: out
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Start mitmdump
+        run: |
+          pip install mitmproxy
+          mkdir -p out
+          nohup mitmdump --listen-port 8080 -w out/flows.mitm --set hardump=out/flows.har > out/mitmdump.log 2>&1 &
+          for _ in $(seq 1 20); do [ -f ~/.mitmproxy/mitmproxy-ca-cert.pem ] && break; sleep 1; done
+
+      - name: Add SDK tools to PATH
+        run: |
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+
+      - name: Root AVD and install CA
+        run: bash scripts/root_and_install_ca.sh
+
+      - name: Check HTTPS interception
+        run: bash scripts/check_https.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          pkill -INT mitmdump || true; sleep 5
+          echo "--- decrypted HTTPS requests ---"
+          grep -E 'GET https://|POST https://' out/mitmdump.log | head -20 || true
+          echo "--- TLS failures ---"
+          grep -c 'does not trust' out/mitmdump.log || true
+          adb emu kill || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: root-results
+          path: out/

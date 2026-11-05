@@ -8,6 +8,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOTAVD_REF=613caa44371f85e1a461bc030e07ddc2d71afe32
 IMG="system-images/android-$API/$TARGET/x86_64"
 mkdir -p "$OUT"
+# avdmanager and the emulator can disagree on the default AVD folder; pin it.
+export ANDROID_AVD_HOME=${ANDROID_AVD_HOME:-$HOME/.android/avd}
+mkdir -p "$ANDROID_AVD_HOME"
 
 log "Install system image and create AVD"
 yes | sdkmanager --licenses > /dev/null || true

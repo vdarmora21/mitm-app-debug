@@ -11,7 +11,7 @@ mkdir -p "$OUT"
 
 log "Install system image and create AVD"
 yes | sdkmanager --licenses > /dev/null || true
-sdkmanager --install "$IMG" "emulator" "platform-tools" > /dev/null
+sdkmanager --install "${IMG//\//;}" "emulator" "platform-tools" > /dev/null
 echo no | avdmanager create avd --force -n "$AVD" -k "${IMG//\//;}" -d pixel_4
 
 log "First boot (stock)"

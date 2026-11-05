@@ -4,13 +4,14 @@ EMU_OPTS=${EMU_OPTS:-"-no-window -gpu swiftshader_indirect -noaudio -no-boot-ani
 log() { echo "::group::$*" >&2; echo "[$(date +%T)] $*" >&2; echo "::endgroup::" >&2; }
 
 start_emulator() {
-  "$ANDROID_HOME/emulator/emulator" -avd "$AVD" $EMU_OPTS > "$OUT/emulator-$(date +%s).log" 2>&1 &
+  EMU_LOG="$OUT/emulator-$(date +%s).log"
+  "$ANDROID_HOME/emulator/emulator" -avd "$AVD" $EMU_OPTS > "$EMU_LOG" 2>&1 &
   EMU_PID=$!
-  wait_boot
+  wait_boot || { echo "--- emulator log ---" >&2; tail -60 "$EMU_LOG" >&2; return 1; }
 }
 
 wait_boot() {
-  adb wait-for-device
+  timeout 180 adb wait-for-device || { echo "No device after 180s" >&2; return 1; }
   local t=0
   until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; do
     sleep 2; t=$((t + 2))

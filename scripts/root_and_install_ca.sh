@@ -21,7 +21,7 @@ log "Patch ramdisk with rootAVD"
 ROOTAVD=$RUNNER_TEMP/rootAVD
 [ -d "$ROOTAVD" ] || { git clone -q https://gitlab.com/newbit/rootAVD.git "$ROOTAVD"; git -C "$ROOTAVD" checkout -q "$ROOTAVD_REF"; }
 # stdin from /dev/null answers every prompt with its default (Magisk stable).
-(cd "$ROOTAVD" && ./rootAVD.sh "$IMG/ramdisk.img" < /dev/null) 2>&1 | tee "$OUT/rootavd.log"
+(cd "$ROOTAVD" && timeout 600 ./rootAVD.sh "$IMG/ramdisk.img" < /dev/null) 2>&1 | tee "$OUT/rootavd.log"
 wait_exit
 
 log "Second boot (rooted)"
@@ -29,7 +29,7 @@ start_emulator
 adb shell pm list packages | grep -q com.topjohnwu.magisk || { echo "Magisk app missing" >&2; exit 1; }
 
 log "Grant adb shell root via the Magisk prompt"
-( adb shell su -c id > "$OUT/su-id.txt" 2>&1 ) &
+( timeout 60 adb shell su -c id > "$OUT/su-id.txt" 2>&1 ) &
 SU_PID=$!
 for _ in $(seq 1 30); do
   kill -0 $SU_PID 2>/dev/null || break
@@ -39,6 +39,7 @@ done
 wait $SU_PID || true
 cat "$OUT/su-id.txt"
 grep -q 'uid=0' "$OUT/su-id.txt" || {
+  grep -oE 'text="[^"]+"' /dev/null $(adb exec-out cat /sdcard/ui.xml > "$OUT/ui.xml" 2>/dev/null; echo "$OUT/ui.xml") | head -30 >&2 || true
   adb exec-out screencap -p > "$OUT/su-prompt.png"
   adb exec-out cat /sdcard/ui.xml > "$OUT/su-prompt.xml" 2>/dev/null || true
   echo "Root was not granted" >&2; exit 1

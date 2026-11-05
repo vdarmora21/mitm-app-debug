@@ -72,7 +72,11 @@ jobs:
 
       - name: Stop mitmdump
         if: always()
-        run: pkill -INT mitmdump || true; sleep 5
+        run: |
+          pkill -INT mitmdump || true; sleep 5
+          cat out/android-version.txt || true
+          echo "--- mitmdump log (last 40 lines) ---"
+          tail -40 out/mitmdump.log || true
 
       - uses: actions/upload-artifact@v4
         if: always()

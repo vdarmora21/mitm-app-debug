@@ -52,3 +52,14 @@ dismiss_anr() {
   local i
   for i in 1 2 3; do tap_text 'Wait' || return 0; sleep 2; done
 }
+
+# Tap the first node whose text, content-desc or resource-id contains $1.
+tap_match() {
+  adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || return 1
+  local node b
+  node=$(adb exec-out cat /sdcard/ui.xml | grep -oE '<node [^>]*>' | grep -iE "(text|content-desc|resource-id)=\"[^\"]*$1[^\"]*\"" | grep 'enabled="true"' | head -1)
+  b=$(echo "$node" | grep -oE 'bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' | grep -oE '\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]')
+  [ -n "$b" ] || return 1
+  set -- $(echo "$b" | tr '[],' '   ')
+  adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 ))
+}

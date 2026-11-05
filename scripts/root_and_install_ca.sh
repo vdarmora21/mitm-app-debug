@@ -53,11 +53,13 @@ log "Grant adb shell root via the Magisk prompt"
 for attempt in 1 2 3; do
   ( timeout 60 adb shell su -c id > "$OUT/su-id.txt" 2>&1 ) &
   SU_PID=$!
-  for _ in $(seq 1 30); do
+  sleep 3
+  adb shell dumpsys activity activities | grep -m1 -E 'topResumedActivity|mResumedActivity' >&2 || true
+  adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 && adb exec-out cat /sdcard/ui.xml | grep -oE '<node [^>]*>' | grep -E 'magisk' | grep -oE '(text|resource-id|content-desc|enabled)="[^"]*"' | paste -sd' ' | cut -c1-1500 >&2
+  for _ in $(seq 1 20); do
     kill -0 $SU_PID 2>/dev/null || break
-    tap_text 'grant' && break
-    dismiss_anr
-    sleep 1
+    tap_match 'grant' && { echo "tapped grant" >&2; break; }
+    sleep 0.5
   done
   wait $SU_PID || true
   echo "attempt $attempt: $(cat "$OUT/su-id.txt")" >&2

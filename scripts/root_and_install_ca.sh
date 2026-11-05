@@ -54,24 +54,13 @@ for attempt in 1 2 3; do
   ( timeout 60 adb shell su -c id > "$OUT/su-id.txt" 2>&1 ) &
   SU_PID=$!
   sleep 3
-  # Magisk hides its su dialog from accessibility, so tap by position: the dialog
-  # window is the only node in the dump, and Grant sits in its bottom-right corner.
-  if adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1; then
-    B=$(adb exec-out cat /sdcard/ui.xml | grep -oE 'bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' | head -1 | grep -oE '[0-9]+' | paste -sd' ')
-    echo "su dialog bounds: $B" >&2
-    if [ "$attempt" = 1 ]; then
-      adb exec-out screencap -p | gzip -9 | base64 -w0 > "$OUT/su-dialog.b64"
-      echo "SCREENSHOT_B64_BEGIN"; cat "$OUT/su-dialog.b64"; echo; echo "SCREENSHOT_B64_END"
-    fi
-    set -- $B
-    if [ $# -eq 4 ]; then
-      X=$(( $1 + ($3 - $1) * 3 / 4 ))
-      for DY in 60 100 140 180 220; do
-        kill -0 $SU_PID 2>/dev/null || break
-        adb shell input tap $X $(( $4 - DY )); sleep 1
-      done
-    fi
-  fi
+  # Magisk hides its su dialog from accessibility, so tap GRANT by position.
+  # Measured on the Pixel 4 profile (1080x2280): GRANT sits at 68% across, 64% down.
+  read -r W H < <(adb shell wm size | grep -oE '[0-9]+x[0-9]+' | tail -1 | tr x ' ')
+  for _ in 1 2 3; do
+    kill -0 $SU_PID 2>/dev/null || break
+    adb shell input tap $(( W * 683 / 1000 )) $(( H * 638 / 1000 )); sleep 2
+  done
   wait $SU_PID || true
   echo "attempt $attempt: $(cat "$OUT/su-id.txt")" >&2
   grep -q 'uid=0' "$OUT/su-id.txt" && break

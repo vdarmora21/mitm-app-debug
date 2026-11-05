@@ -40,3 +40,9 @@ tap_text() {
   set -- $(echo "$b" | tr '[],' '   ')
   adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 ))
 }
+
+# Print the visible on-screen texts (for logs).
+dump_texts() {
+  adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || return 0
+  adb exec-out cat /sdcard/ui.xml | grep -oE 'text="[^"]+"' | head -20 >&2 || true
+}

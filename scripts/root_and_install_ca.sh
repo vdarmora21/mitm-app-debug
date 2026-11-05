@@ -31,22 +31,34 @@ log "Second boot (rooted)"
 start_emulator
 adb shell pm list packages | grep -q com.topjohnwu.magisk || { echo "Magisk app missing" >&2; exit 1; }
 
+log "Open Magisk once so it can finish setup"
+adb shell monkey -p com.topjohnwu.magisk -c android.intent.category.LAUNCHER 1 > /dev/null
+sleep 15
+dump_texts
+# "Requires additional setup" -> OK reboots the device.
+if tap_text 'OK'; then
+  echo "Magisk asked for additional setup, waiting for reboot" >&2
+  sleep 20; wait_boot
+  adb shell monkey -p com.topjohnwu.magisk -c android.intent.category.LAUNCHER 1 > /dev/null
+  sleep 10; dump_texts
+fi
+
 log "Grant adb shell root via the Magisk prompt"
-( timeout 60 adb shell su -c id > "$OUT/su-id.txt" 2>&1 ) &
-SU_PID=$!
-for _ in $(seq 1 30); do
-  kill -0 $SU_PID 2>/dev/null || break
-  tap_text 'grant' && break
-  sleep 1
+for attempt in 1 2 3; do
+  ( timeout 60 adb shell su -c id > "$OUT/su-id.txt" 2>&1 ) &
+  SU_PID=$!
+  for _ in $(seq 1 30); do
+    kill -0 $SU_PID 2>/dev/null || break
+    tap_text 'grant' && break
+    sleep 1
+  done
+  wait $SU_PID || true
+  echo "attempt $attempt: $(cat "$OUT/su-id.txt")" >&2
+  grep -q 'uid=0' "$OUT/su-id.txt" && break
+  dump_texts
+  sleep 5
 done
-wait $SU_PID || true
-cat "$OUT/su-id.txt"
-grep -q 'uid=0' "$OUT/su-id.txt" || {
-  grep -oE 'text="[^"]+"' /dev/null $(adb exec-out cat /sdcard/ui.xml > "$OUT/ui.xml" 2>/dev/null; echo "$OUT/ui.xml") | head -30 >&2 || true
-  adb exec-out screencap -p > "$OUT/su-prompt.png"
-  adb exec-out cat /sdcard/ui.xml > "$OUT/su-prompt.xml" 2>/dev/null || true
-  echo "Root was not granted" >&2; exit 1
-}
+grep -q 'uid=0' "$OUT/su-id.txt" || { adb exec-out screencap -p > "$OUT/su-prompt.png"; echo "Root was not granted" >&2; exit 1; }
 
 log "Install CA module"
 bash "$HERE/../build_module.sh" "$HOME/.mitmproxy/mitmproxy-ca-cert.pem" "$OUT/user-ca-mitm.zip"

@@ -40,10 +40,14 @@ dump_texts
 # "Requires additional setup" -> OK reboots the device.
 if tap_text 'OK'; then
   echo "Magisk asked for additional setup, waiting for reboot" >&2
-  sleep 20; wait_boot
+  # Wait until the device has actually gone down before waiting for it to come back.
+  timeout 90 sh -c 'while adb shell true 2>/dev/null; do sleep 2; done' || true
+  wait_boot
+  sleep 30; dismiss_anr
   adb shell monkey -p com.topjohnwu.magisk -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
-  sleep 10; dump_texts
+  sleep 15; dismiss_anr; dump_texts
 fi
+adb shell 'su -v; su -V' >&2 || true
 
 log "Grant adb shell root via the Magisk prompt"
 for attempt in 1 2 3; do
@@ -52,6 +56,7 @@ for attempt in 1 2 3; do
   for _ in $(seq 1 30); do
     kill -0 $SU_PID 2>/dev/null || break
     tap_text 'grant' && break
+    dismiss_anr
     sleep 1
   done
   wait $SU_PID || true

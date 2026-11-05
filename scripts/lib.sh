@@ -46,3 +46,9 @@ dump_texts() {
   adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || return 0
   adb exec-out cat /sdcard/ui.xml | grep -oE 'text="[^"]+"' | head -20 >&2 || true
 }
+
+# Dismiss "X isn't responding" dialogs that slow software-rendered emulators show.
+dismiss_anr() {
+  local i
+  for i in 1 2 3; do tap_text 'Wait' || return 0; sleep 2; done
+}
